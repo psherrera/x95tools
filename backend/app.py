@@ -7,15 +7,20 @@ import requests
 from urllib.parse import quote
 
 # --- INYECCIÓN DE FFMEG AL PATH (CRÍTICO PARA WHISPER) ---
-# NOTA: BlueStacks tiene FFmpeg con --disable-decoders (no sirve para audio AAC)
+# Intentamos encontrar FFmpeg en el sistema o en la carpeta local
 ffmpeg_extra_paths = [
+    os.getcwd(),                             # Carpeta raíz del proyecto
+    os.path.join(os.getcwd(), 'bin'),        # Carpeta bin local
     r'C:\Program Files\Red Giant\Trapcode Suite\Tools',
     r'C:\Program Files\SnapDownloader\resources\win',
 ]
 current_path = os.environ.get("PATH", "")
-for p in reversed(ffmpeg_extra_paths):
-    if os.path.exists(p) and p not in current_path:
-        os.environ["PATH"] = p + os.pathsep + os.environ["PATH"]
+nuevo_path = current_path
+for p in ffmpeg_extra_paths:
+    if os.path.exists(p) and p not in nuevo_path:
+        nuevo_path = p + os.pathsep + nuevo_path
+
+os.environ["PATH"] = nuevo_path
 # --------------------------------------------------------
 
 import json
