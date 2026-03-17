@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Downloader - Entrevistas Premium</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="login-modal" class="login-overlay">
+        <div class="glass-card login-card">
+            <h2>Acceso Privado</h2>
+            <p>Introduce la contraseña para usar el descargador.</p>
+            <div class="input-group">
+                <input type="password" id="app-password" placeholder="Contraseña...">
+                <button id="login-btn">Entrar</button>
+            </div>
+            <p id="login-error" class="error-text hidden">Contraseña incorrecta</p>
+        </div>
+    </div>
+
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="container">
+        <header>
+            <h1>YT Downloader</h1>
+            <p>Descarga las entrevistas de tu empleador con la mejor calidad.</p>
+        </header>
+
+        <section class="glass-card search-section">
+            <div class="input-group">
+                <input type="text" id="video-url" placeholder="Pega el enlace de YouTube aquí..." autocomplete="off">
+                <button id="fetch-info-btn">Analizar</button>
+            </div>
+            <div id="loading-spinner" class="hidden">
+                <div class="spinner"></div>
+                <p>Analizando video...</p>
+            </div>
+            <div id="quality-warning" class="hidden quality-msg">
+                <p>⚠️ Algunos formatos requieren FFmpeg para tener audio. Mostrando mejores opciones disponibles.</p>
+            </div>
+        </section>
+
+        <section id="video-info-card" class="glass-card hidden">
+            <div class="video-content">
+                <div class="thumbnail-wrapper">
+                    <img id="video-thumbnail" src="" alt="Miniatura del video">
+                </div>
+                <div class="video-details">
+                    <h2 id="video-title">Título del Video</h2>
+                    <p id="video-uploader" class="uploader">Canal</p>
+                    <p id="video-description" class="description"></p>
+
+                    <div class="download-controls">
+                        <select id="format-select">
+                            <!-- Opciones de formato aquí -->
+                        </select>
+                        <button id="download-btn" class="primary-btn">Descargar Video</button>
+                        <button id="download-thumb-btn" class="secondary-btn">Imagen (Miniatura)</button>
+                        <button id="download-txt-btn" class="secondary-btn hidden">Texto (.txt)</button>
+                        <button id="show-transcript-btn" class="secondary-btn hidden">Ver Texto</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="transcript-section" class="hidden transcript-container">
+                <div class="transcript-header">
+                    <h3>Transcripción del Video</h3>
+                    <button id="copy-transcript-btn" class="small-btn">Copiar</button>
+                </div>
+                <div id="transcript-content" class="transcript-body">
+                    <p>Cargando transcripción...</p>
+                </div>
+            </div>
+            <div id="download-progress" class="hidden">
+                <div class="progress-bar-container">
+                    <div class="progress-fill"></div>
+                </div>
+                <p id="progress-text">Iniciando descarga...</p>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>&copy; 2026 Premium Video Downloader</p>
+        </footer>
+    </main>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
