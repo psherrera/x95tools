@@ -19,15 +19,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadTxtBtn = document.getElementById('download-txt-btn');
     const progressFill = document.querySelector('.progress-fill');
     const progressText = document.getElementById('progress-text');
+    const appSubtitle = document.getElementById('app-subtitle');
 
     const loginModal = document.getElementById('login-modal');
     const loginBtn = document.getElementById('login-btn');
     const passwordInput = document.getElementById('app-password');
     const loginError = document.getElementById('login-error');
 
-    const API_BASE = 'http://127.0.0.1:5000/api'; // Cambiar a la URL de Render después
-    const APP_PASSWORD = 'pablo'; // CAMBIA TU CONTRASEÑA AQUÍ
+    const tabBtns = document.querySelectorAll('.tab-btn');
+
+    const API_BASE = 'http://127.0.0.1:5000/api'; 
+    const APP_PASSWORD = 'pablo'; 
     
+    let currentTab = 'youtube';
+
+    // Tab Logic
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTab = btn.dataset.tab;
+            
+            // Update UI based on tab
+            if (currentTab === 'youtube') {
+                videoUrlInput.placeholder = "Pega el enlace de YouTube aquí...";
+                appSubtitle.textContent = "Descarga entrevistas y videos de YouTube con la mejor calidad.";
+            } else {
+                videoUrlInput.placeholder = "Pega el enlace de Instagram (Reel o Video) aquí...";
+                appSubtitle.textContent = "Descarga Reels y Videos de Instagram fácilmente.";
+            }
+
+            // Reset results when switching tabs
+            videoInfoCard.classList.add('hidden');
+            videoUrlInput.value = '';
+        });
+    });
+
     // Login Logic
     loginBtn.addEventListener('click', () => {
         if (passwordInput.value === APP_PASSWORD) {
@@ -53,7 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchBtn.addEventListener('click', async () => {
         const url = videoUrlInput.value.trim();
         if (!url) {
-            alert('Por favor, pega una URL válida de YouTube');
+            const platform = currentTab === 'youtube' ? 'YouTube' : 'Instagram';
+            alert(`Por favor, pega una URL válida de ${platform}`);
             return;
         }
 
@@ -88,7 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Populate Video Info
-            thumbnailImg.src = data.thumbnail;
+            if (data.thumbnail) {
+                thumbnailImg.src = data.thumbnail;
+                thumbnailImg.style.display = '';
+            } else {
+                thumbnailImg.style.display = 'none';
+            }
             titleEl.textContent = data.title;
             uploaderEl.textContent = data.uploader;
             descriptionEl.textContent = data.description;
@@ -104,13 +137,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 formatSelect.appendChild(option);
             });
 
-            if (!data.has_ffmpeg) {
+            if (data.formats.length === 0) {
+                const option = document.createElement('option');
+                option.value = 'best';
+                option.textContent = 'Mejor calidad disponible';
+                formatSelect.appendChild(option);
+            }
+
+            if (!data.has_ffmpeg && currentTab === 'youtube') {
                 qualityWarning.classList.remove('hidden');
             }
 
-            if (data.has_subtitles) {
-                showTranscriptBtn.classList.remove('hidden');
-            }
+            // Siempre mostramos el botón de transcripción, el backend decidirá si usa subs o Whisper
+            showTranscriptBtn.classList.remove('hidden');
 
             videoInfoCard.classList.remove('hidden');
         } catch (error) {
@@ -152,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
             a.href = downloadUrl;
             
             // Intentar obtener el nombre del archivo del header o usar el título
-            const filename = `${titleEl.textContent.substring(0, 30)}.mp4`;
+            const filename = `${titleEl.textContent.substring(0, 30).trim() || 'video'}.mp4`;
             a.download = filename;
             
             document.body.appendChild(a);
@@ -183,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const a = document.createElement('a');
         a.href = currentMaxResThumbnail;
         a.download = `miniatura_${titleEl.textContent.substring(0, 20)}.jpg`;
-        a.target = '_blank'; // Por si el navegador bloquea la descarga directa de cross-origin
+        a.target = '_blank'; 
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -192,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showTranscriptBtn.addEventListener('click', async () => {
         const url = videoUrlInput.value.trim();
         transcriptSection.classList.remove('hidden');
-        transcriptContent.innerHTML = '<p>Analizando y extrayendo texto... por favor espera.</p>';
+        transcriptContent.innerHTML = '<p>Analizando y extrayendo texto... por favor espera (esto puede tardar unos minutos si se usa IA).</p>';
         showTranscriptBtn.disabled = true;
 
         try {
@@ -208,7 +247,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cleanError = data.error.replace(/\u001b\[[0-9;]*m/g, '');
                 transcriptContent.innerHTML = `<p class="error-text">Error: ${cleanError}</p>`;
             } else {
-                transcriptContent.innerHTML = `<p>${data.transcript}</p>`;
+                const methodLabel = data.method === 'whisper' ? ' (Procesado con IA Whisper)' : '';
+                transcriptContent.innerHTML = `<p>${data.transcript}</p><p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 10px;">${methodLabel}</p>`;
                 downloadTxtBtn.classList.remove('hidden');
             }
         } catch (error) {

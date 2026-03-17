@@ -30,9 +30,18 @@
 
     <main class="container">
         <header>
-            <h1>YT Downloader</h1>
-            <p>Descarga las entrevistas de tu empleador con la mejor calidad.</p>
+            <h1>Video Downloader</h1>
+            <p id="app-subtitle">Descarga entrevistas y contenido con la mejor calidad.</p>
         </header>
+
+        <section class="tabs-container">
+            <button class="tab-btn active" data-tab="youtube">
+                <span class="icon">📺</span> YouTube
+            </button>
+            <button class="tab-btn" data-tab="instagram">
+                <span class="icon">📸</span> Instagram
+            </button>
+        </section>
 
         <section class="glass-card search-section">
             <div class="input-group">
@@ -51,7 +60,7 @@
         <section id="video-info-card" class="glass-card hidden">
             <div class="video-content">
                 <div class="thumbnail-wrapper">
-                    <img id="video-thumbnail" src="" alt="Miniatura del video">
+                    <img id="video-thumbnail" src="" alt="Miniatura del video" referrerpolicy="no-referrer">
                 </div>
                 <div class="video-details">
                     <h2 id="video-title">Título del Video</h2>
@@ -62,10 +71,10 @@
                         <select id="format-select">
                             <!-- Opciones de formato aquí -->
                         </select>
-                        <button id="download-btn" class="primary-btn">Descargar Video</button>
+                        <button id="download-btn" class="primary-btn">Descargar</button>
                         <button id="download-thumb-btn" class="secondary-btn">Imagen (Miniatura)</button>
                         <button id="download-txt-btn" class="secondary-btn hidden">Texto (.txt)</button>
-                        <button id="show-transcript-btn" class="secondary-btn hidden">Ver Texto</button>
+                        <button id="show-transcript-btn" class="secondary-btn">Ver Texto</button>
                     </div>
                 </div>
             </div>
