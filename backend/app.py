@@ -4,6 +4,8 @@ import os
 from flask_cors import CORS
 import uuid
 import requests
+import gc
+import torch
 from urllib.parse import quote
 from deep_translator import GoogleTranslator
 
@@ -145,6 +147,7 @@ def get_video_info():
         'cachedir': False,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
     }
     if has_ffmpeg:
         base_opts['ffmpeg_location'] = ffmpeg_path
@@ -314,6 +317,7 @@ def get_transcript():
             'quiet': True,
             'noplaylist': True,
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
         }
         fpath = get_ffmpeg_path()
         if fpath:
@@ -454,6 +458,11 @@ def get_transcript():
                 whisper_error_str = str(whisper_e)
                 print(f"Whisper failed raw: {whisper_error_str}")
                 return jsonify({'error': f'Error en transcripcion IA: {whisper_error_str}'}), 500
+            finally:
+                # Liberar memoria agresivamente
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
@@ -474,6 +483,7 @@ def download_video():
         'quiet': True,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
     }
     # Opciones extra solo para YouTube
     if 'youtube.com' in url or 'youtu.be' in url:
