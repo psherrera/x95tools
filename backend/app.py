@@ -12,6 +12,7 @@ from deep_translator import GoogleTranslator
 # --- CONFIGURACIÓN DE RUTAS Y ENTORNO ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Raíz del proyecto
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+IS_RENDER = os.environ.get('RENDER') is not None
 
 # Intentamos encontrar FFmpeg en el sistema o en la carpeta local
 ffmpeg_extra_paths = [
@@ -63,6 +64,9 @@ whisper_model = None
 
 def get_whisper_model():
     global whisper_model
+    if IS_RENDER:
+        print("INFO: IA Whisper desactivada en Render para prevenir cuelgues (Poca RAM).")
+        return None
     if whisper_model is None:
         try:
             import whisper
@@ -167,11 +171,13 @@ def get_video_info():
 
     if is_youtube:
         attempts = [
-            # Android client: obtiene formatos adaptativos completos (1080p, 4K)
+            # TV Client: Muy resistente a bloqueos en servidores/centros de datos
+            {**base_opts, 'extractor_args': {'youtube': {'player_client': ['tv', 'web']}}},
+            # Android client: excelente combinación formatos/compatibilidad
             {**base_opts, 'extractor_args': {'youtube': {'player_client': ['android']}}},
             # iOS client: alternativa
             {**base_opts, 'extractor_args': {'youtube': {'player_client': ['ios']}}},
-            # Web básico sin extractor args
+            # Web básico (con cookies si fallan los demás)
             {**base_opts},
         ]
     else:
