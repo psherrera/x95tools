@@ -1,9 +1,11 @@
 services:
   - type: web
-    name: yt-downloader-backend
+    name: x95tools-backend
     env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn backend.app:app
+    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PORT
         value: 10000
+      - key: PYTHON_VERSION
+        value: 3.10.0
