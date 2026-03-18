@@ -8,6 +8,12 @@ import gc
 import torch
 from urllib.parse import quote
 from deep_translator import GoogleTranslator
+import os
+try:
+    from groq import Groq
+    groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY")) if os.environ.get("GROQ_API_KEY") else None
+except ImportError:
+    groq_client = None
 
 # --- CONFIGURACIÓN DE RUTAS Y ENTORNO ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Raíz del proyecto
