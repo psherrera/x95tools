@@ -1,3 +1,7 @@
+# Netscape HTTP Cookie File
+# http://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file!  Do not edit.
+
 .youtube.com	TRUE	/	TRUE	1808429899	PREF	f6=40000000&f7=4100&tz=America.Buenos_Aires&f5=20000&repeat=NONE&autoplay=true&volume=57
 .youtube.com	TRUE	/	TRUE	1804784666	LOGIN_INFO	AFmmF2swRQIhALSmvZBukmZP-gEssejuz3MJEaQqACremuwEw1ZtUMR2AiAHgBIocVbqzFdZCz07qj22nH5cGmN3LyJ1dlhB_HpS2w:QUQ3MjNmeE5NR2Y1dW5IalpDN0ZJdVhqaWJ5cUQ3TkxhaWR5ZE8ydEhKWl9lNUNrMGtNMHkwS1c5MTFqNEVqajVyT0hXMlpCUGtLZ2lDNkl6RGJ5blZxVFBHcDd5d3pDOXJGT28wZEo3OG1KalcySWNiOXl6OUduUERDd0g1anUzbzk2VHFSbDVsSlNsSFItMG9IT2huRlJaQWtPT3RmMGZR
 .youtube.com	TRUE	/	FALSE	1808228333	HSID	ACHNSE7vqmhuj-QLe
