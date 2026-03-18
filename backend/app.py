@@ -138,16 +138,29 @@ def get_video_info():
     # Detectar FFmpeg
     ffmpeg_path = get_ffmpeg_path()
     has_ffmpeg = ffmpeg_path is not None
+    
+    # Diagnóstico de Cookies
+    cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
+    has_cookies = os.path.exists(cookie_path)
+    print(f"DEBUG: Cookie path: {cookie_path} (Existe: {has_cookies})")
+    if has_cookies:
+        try:
+            with open(cookie_path, 'r') as f:
+                first_line = f.readline()
+                print(f"DEBUG: Cookie file first line: {first_line.strip()}")
+        except Exception as e:
+            print(f"DEBUG: Error reading cookies: {e}")
 
     is_youtube = 'youtube.com' in url or 'youtu.be' in url
 
     base_opts = {
-        'quiet': True,
-        'no_warnings': True,
+        'quiet': False, # Para ver logs en Render
+        'no_warnings': False,
         'cachedir': False,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
+        'cookiefile': cookie_path if has_cookies else None,
+        'nocheckcertificate': True,
     }
     if has_ffmpeg:
         base_opts['ffmpeg_location'] = ffmpeg_path
