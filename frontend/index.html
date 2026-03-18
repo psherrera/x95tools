@@ -18,7 +18,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon.svg">
     
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1.1">
     
     <script id="tailwind-config">
         tailwind.config = {
@@ -50,14 +50,14 @@
             <h1 class="text-3xl font-bold mb-2">Acceso Privado</h1>
             <p class="text-slate-400 mb-8 text-sm">Introduce la contraseña para entrar al Vault.</p>
             
-            <div class="space-y-4">
+            <div class="space-y-6">
                 <div class="relative">
                     <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">lock</span>
                     <input type="password" id="app-password" placeholder="Contraseña..." 
-                        class="w-full bg-slate-900 border border-white/10 rounded-xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-600">
+                        class="w-full bg-slate-900 border border-white/10 rounded-xl py-5 pl-12 pr-4 text-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-600">
                 </div>
-                <button id="login-btn" class="w-full glow-button py-4 rounded-xl font-bold flex items-center justify-center gap-2">
-                    Desbloquear <span class="material-symbols-outlined">arrow_forward</span>
+                <button id="login-btn" class="w-full glow-button py-5 rounded-2xl text-xl font-extrabold flex items-center justify-center gap-3 transition-transform active:scale-95">
+                    Entrar al Sistema <span class="material-symbols-outlined text-2xl">verified_user</span>
                 </button>
                 <p id="login-error" class="text-red-400 text-sm font-medium hidden">Contraseña incorrecta</p>
             </div>
@@ -275,7 +275,7 @@
         &copy; 2026 StreamVault Digital Media Hub
     </footer>
 
-    <script src="main.js"></script>
+    <script src="main.js?v=1.1"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
