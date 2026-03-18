@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // UI Elements
     const videoUrlInput = document.getElementById('video-url');
     const fetchBtn = document.getElementById('fetch-info-btn');
     const loadingSpinner = document.getElementById('loading-spinner');
@@ -12,41 +13,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadBtn = document.getElementById('download-btn');
     const downloadThumbBtn = document.getElementById('download-thumb-btn');
     const downloadProgress = document.getElementById('download-progress');
+    const progressFill = document.querySelector('.progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const progressPercentage = document.getElementById('progress-percentage');
     const showTranscriptBtn = document.getElementById('show-transcript-btn');
     const transcriptSection = document.getElementById('transcript-section');
     const transcriptContent = document.getElementById('transcript-content');
     const copyTranscriptBtn = document.getElementById('copy-transcript-btn');
     const downloadTxtBtn = document.getElementById('download-txt-btn');
-    const progressFill = document.querySelector('.progress-fill');
-    const progressText = document.getElementById('progress-text');
     const appSubtitle = document.getElementById('app-subtitle');
+    const tabTitle = document.getElementById('tab-title');
+    const inputIcon = document.getElementById('input-icon');
 
     const loginModal = document.getElementById('login-modal');
     const loginBtn = document.getElementById('login-btn');
     const passwordInput = document.getElementById('app-password');
     const loginError = document.getElementById('login-error');
 
-    const tabBtns = document.querySelectorAll('.tab-btn');
-
+    // Navigation Logic
+    const navItems = document.querySelectorAll('.nav-item');
+    
+    // API Configuration
     const API_BASE = 'http://127.0.0.1:5000/api'; 
     const APP_PASSWORD = 'pablo'; 
     
     let currentTab = 'youtube';
 
     // Tab Logic
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentTab = btn.dataset.tab;
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            if (item.classList.contains('cursor-not-allowed')) return;
+
+            navItems.forEach(i => {
+                i.classList.remove('active', 'text-primary');
+                i.classList.add('text-slate-500');
+            });
+
+            item.classList.add('active', 'text-primary');
+            item.classList.remove('text-slate-500');
+            
+            currentTab = item.dataset.tab;
             
             // Update UI based on tab
             if (currentTab === 'youtube') {
+                tabTitle.textContent = "YouTube Downloader";
                 videoUrlInput.placeholder = "Pega el enlace de YouTube aquí...";
                 appSubtitle.textContent = "Descarga entrevistas y videos de YouTube con la mejor calidad.";
-            } else {
+                inputIcon.textContent = "link";
+            } else if (currentTab === 'instagram') {
+                tabTitle.textContent = "Instagram Downloader";
                 videoUrlInput.placeholder = "Pega el enlace de Instagram (Reel o Video) aquí...";
                 appSubtitle.textContent = "Descarga Reels y Videos de Instagram fácilmente.";
+                inputIcon.textContent = "photo_camera";
             }
 
             // Reset results when switching tabs
@@ -58,11 +76,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Login Logic
     loginBtn.addEventListener('click', () => {
         if (passwordInput.value === APP_PASSWORD) {
-            loginModal.classList.add('hidden');
+            loginModal.classList.add('opacity-0');
+            setTimeout(() => loginModal.classList.add('hidden'), 500);
             localStorage.setItem('app_logged_in', 'true');
         } else {
             loginError.classList.remove('hidden');
             passwordInput.value = '';
+            // Shake effect for error
+            loginModal.querySelector('.glass').classList.add('animate-bounce');
+            setTimeout(() => {
+                loginModal.querySelector('.glass').classList.remove('animate-bounce');
+            }, 500);
         }
     });
 
@@ -77,6 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentMaxResThumbnail = '';
 
+    // Fetch Video Info
     fetchBtn.addEventListener('click', async () => {
         const url = videoUrlInput.value.trim();
         if (!url) {
@@ -85,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Reset UI
+        // Reset UI Components
         videoInfoCard.classList.add('hidden');
         qualityWarning.classList.add('hidden');
         loadingSpinner.classList.remove('hidden');
@@ -93,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showTranscriptBtn.classList.add('hidden');
         downloadTxtBtn.classList.add('hidden');
         
-        // Clear previous info
+        // Clear previous state
         titleEl.textContent = '';
         uploaderEl.textContent = '';
         descriptionEl.textContent = '';
@@ -126,13 +151,20 @@ document.addEventListener('DOMContentLoaded', () => {
             uploaderEl.textContent = data.uploader;
             descriptionEl.textContent = data.description;
             currentMaxResThumbnail = data.max_res_thumbnail;
+            
+            const durationEl = document.getElementById('video-duration');
+            if (durationEl && data.duration) {
+                const mins = Math.floor(data.duration / 60);
+                const secs = data.duration % 60;
+                durationEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
 
-            // Fill Formats
+            // Fill Formats and Selectors
             formatSelect.innerHTML = '';
             data.formats.forEach(f => {
                 const option = document.createElement('option');
                 option.value = f.format_id;
-                const size = f.filesize ? `(${(f.filesize / (1024 * 1024)).toFixed(1)} MB)` : 'Tamaño desconocido';
+                const size = f.filesize ? `(${(f.filesize / (1024 * 1024)).toFixed(1)} MB)` : 'Size N/A';
                 option.textContent = `${f.label} - ${size}`;
                 formatSelect.appendChild(option);
             });
@@ -148,10 +180,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 qualityWarning.classList.remove('hidden');
             }
 
-            // Siempre mostramos el botón de transcripción, el backend decidirá si usa subs o Whisper
+            // Always show transcript button for smarter detection
             showTranscriptBtn.classList.remove('hidden');
 
+            // Reveal result card with animation
             videoInfoCard.classList.remove('hidden');
+            videoInfoCard.classList.add('fade-in');
         } catch (error) {
             console.error('Error:', error);
             alert('Error al conectar con el servidor. ¿Está el backend encendido?');
@@ -160,14 +194,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Download Logic
     downloadBtn.addEventListener('click', async () => {
         const url = videoUrlInput.value.trim();
         const formatId = formatSelect.value;
 
         downloadBtn.disabled = true;
         downloadProgress.classList.remove('hidden');
-        progressFill.style.width = '20%';
-        progressText.textContent = 'Procesando descarga en el servidor...';
+        
+        // Progress Simulation for visual feedback
+        let progress = 0;
+        const interval = setInterval(() => {
+            if (progress < 90) {
+                progress += Math.random() * 5;
+                updateProgress(Math.floor(progress), 'Procesando descarga en el servidor...');
+            }
+        }, 800);
+
+        function updateProgress(val, text) {
+            progressFill.style.width = `${val}%`;
+            progressPercentage.textContent = `${val}%`;
+            if (text) progressText.textContent = text;
+        }
 
         try {
             const response = await fetch(`${API_BASE}/download`, {
@@ -181,16 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(errData.error || 'Error en la descarga');
             }
 
-            // Simular progreso final
-            progressFill.style.width = '80%';
-            progressText.textContent = 'Preparando archivo para transferencia...';
+            clearInterval(interval);
+            updateProgress(95, 'Preparando transferencia segura...');
 
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = downloadUrl;
             
-            // Intentar obtener el nombre del archivo del header o usar el título
             const filename = `${titleEl.textContent.substring(0, 30).trim() || 'video'}.mp4`;
             a.download = filename;
             
@@ -199,39 +245,29 @@ document.addEventListener('DOMContentLoaded', () => {
             window.URL.revokeObjectURL(downloadUrl);
             a.remove();
 
-            progressFill.style.width = '100%';
-            progressText.textContent = '¡Descarga completada!';
+            updateProgress(100, '¡Descarga completada con éxito!');
             
             setTimeout(() => {
                 downloadProgress.classList.add('hidden');
                 downloadBtn.disabled = false;
-            }, 3000);
+            }, 5000);
 
         } catch (error) {
+            clearInterval(interval);
             console.error('Error:', error);
             alert(`Error: ${error.message}`);
-        } finally {
             downloadProgress.classList.add('hidden');
+        } finally {
             downloadBtn.disabled = false;
         }
     });
 
-    downloadThumbBtn.addEventListener('click', () => {
-        if (!currentMaxResThumbnail) return;
-        
-        const a = document.createElement('a');
-        a.href = currentMaxResThumbnail;
-        a.download = `miniatura_${titleEl.textContent.substring(0, 20)}.jpg`;
-        a.target = '_blank'; 
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-    });
-
+    // Transcript Extractor Logic
     showTranscriptBtn.addEventListener('click', async () => {
         const url = videoUrlInput.value.trim();
         transcriptSection.classList.remove('hidden');
-        transcriptContent.innerHTML = '<p>Analizando y extrayendo texto... por favor espera (esto puede tardar unos minutos si se usa IA).</p>';
+        transcriptSection.classList.add('fade-in');
+        transcriptContent.innerHTML = '<p class="animate-pulse">Analizando y extrayendo texto con IA... por favor espera.</p>';
         showTranscriptBtn.disabled = true;
 
         try {
@@ -245,32 +281,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (data.error) {
                 const cleanError = data.error.replace(/\u001b\[[0-9;]*m/g, '');
-                transcriptContent.innerHTML = `<p class="error-text">Error: ${cleanError}</p>`;
+                transcriptContent.innerHTML = `<div class="bg-red-500/10 p-4 rounded-xl border border-red-500/20 text-red-400">Error: ${cleanError}</div>`;
             } else {
-                const methodLabel = data.method === 'whisper' ? ' (Procesado con IA Whisper)' : '';
-                transcriptContent.innerHTML = `<p>${data.transcript}</p><p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 10px;">${methodLabel}</p>`;
+                const methodLabel = data.method === 'whisper' ? ' (Procesado con IA Whisper)' : ' (Subtítulos directos)';
+                transcriptContent.innerHTML = `
+                    <p class="mb-4">${data.transcript}</p>
+                    <div class="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-white/5 py-1 px-3 rounded-full w-fit">
+                        <span class="material-symbols-outlined text-xs">info</span>
+                        Metodo: ${methodLabel}
+                    </div>
+                `;
                 downloadTxtBtn.classList.remove('hidden');
+                downloadTxtBtn.classList.add('fade-in');
             }
         } catch (error) {
-            transcriptContent.innerHTML = `<p class="error-text">Error al conectar con el servidor.</p>`;
+            transcriptContent.innerHTML = `<p class="text-red-400">Error al conectar con el servidor.</p>`;
         } finally {
             showTranscriptBtn.disabled = false;
         }
     });
 
+    // Action Helpers
+    downloadThumbBtn.addEventListener('click', () => {
+        if (!currentMaxResThumbnail) return;
+        window.open(currentMaxResThumbnail, '_blank');
+    });
+
     copyTranscriptBtn.addEventListener('click', () => {
-        const text = transcriptContent.textContent;
+        const text = transcriptContent.textContent.split('Metodo:')[0].trim();
         navigator.clipboard.writeText(text).then(() => {
-            const originalText = copyTranscriptBtn.textContent;
-            copyTranscriptBtn.textContent = '¡Copiado!';
+            const originalHTML = copyTranscriptBtn.innerHTML;
+            copyTranscriptBtn.innerHTML = '<span class="material-symbols-outlined text-sm">check</span> COPIADO';
             setTimeout(() => {
-                copyTranscriptBtn.textContent = originalText;
+                copyTranscriptBtn.innerHTML = originalHTML;
             }, 2000);
         });
     });
 
     downloadTxtBtn.addEventListener('click', () => {
-        const text = transcriptContent.textContent;
+        const text = transcriptContent.textContent.split('Metodo:')[0].trim();
         const blob = new Blob([text], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');

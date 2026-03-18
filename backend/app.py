@@ -5,12 +5,16 @@ from flask_cors import CORS
 import uuid
 import requests
 from urllib.parse import quote
+from deep_translator import GoogleTranslator
 
-# --- INYECCIÓN DE FFMEG AL PATH (CRÍTICO PARA WHISPER) ---
+# --- CONFIGURACIÓN DE RUTAS Y ENTORNO ---
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Raíz del proyecto
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Intentamos encontrar FFmpeg en el sistema o en la carpeta local
 ffmpeg_extra_paths = [
-    os.getcwd(),                             # Carpeta raíz del proyecto
-    os.path.join(os.getcwd(), 'bin'),        # Carpeta bin local
+    BASE_DIR,                                # Carpeta raíz del proyecto
+    os.path.join(BASE_DIR, 'bin'),           # Carpeta bin local
     r'C:\Program Files\Red Giant\Trapcode Suite\Tools',
     r'C:\Program Files\SnapDownloader\resources\win',
 ]
@@ -28,13 +32,13 @@ import json
 app = Flask(__name__)
 CORS(app)
 
-# Directorio temporal para descargas
-DOWNLOAD_FOLDER = os.path.join(os.getcwd(), 'downloads')
+# Directorio temporal para descargas (en la raíz)
+DOWNLOAD_FOLDER = os.path.join(BASE_DIR, 'downloads')
 if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
-# Caché de transcripciones
-CACHE_FILE = os.path.join(os.getcwd(), 'transcripts_cache.json')
+# Caché de transcripciones (en la raíz)
+CACHE_FILE = os.path.join(BASE_DIR, 'transcripts_cache.json')
 
 def load_cache():
     if os.path.exists(CACHE_FILE):
@@ -52,15 +56,35 @@ def save_cache(cache):
     except Exception as e:
         print(f"Error saving cache: {e}")
 
-# Cargar modelo Whisper en memoria al inicio
+# El modelo se cargará la primera vez que se necesite (Lazy Loading)
 whisper_model = None
-try:
-    import whisper
-    print("Cargando modelo Whisper en memoria...")
-    whisper_model = whisper.load_model("base")
-    print("Modelo Whisper cargado correctamente.")
-except Exception as e:
-    print(f"Error al cargar Whisper: {e}")
+
+def get_whisper_model():
+    global whisper_model
+    if whisper_model is None:
+        try:
+            import whisper
+            print("Cargando modelo Whisper en memoria (esto solo ocurre la primera vez)...")
+            # Cambiamos a 'tiny' para que sea mucho más rápido en CPU y no se quede pensando
+            whisper_model = whisper.load_model("tiny")
+            print("Modelo Whisper (tiny) cargado correctamente.")
+        except Exception as e:
+            print(f"Error al cargar Whisper: {e}")
+    return whisper_model
+
+def translate_to_spanish(text):
+    if not text:
+        return ""
+    try:
+        translator = GoogleTranslator(source='auto', target='es')
+        if len(text) > 4500:
+            chunks = [text[i:i+4500] for i in range(0, len(text), 4500)]
+            translated_chunks = [translator.translate(chunk) for chunk in chunks]
+            return " ".join(translated_chunks)
+        return translator.translate(text)
+    except Exception as e:
+        print(f"Error en traduccion: {e}")
+        return text # Fallback al original
 
 @app.route('/api/proxy-thumbnail')
 def proxy_thumbnail():
@@ -89,8 +113,8 @@ def get_ffmpeg_path():
         r'C:\Program Files\Red Giant\Trapcode Suite\Tools\ffmpeg.exe',
         r'C:\Program Files\SnapDownloader\resources\win\ffmpeg.exe',
         'ffmpeg',  # Global PATH
-        os.path.join(os.getcwd(), 'ffmpeg.exe'),
-        os.path.join(os.getcwd(), 'bin', 'ffmpeg.exe'),
+        os.path.join(BASE_DIR, 'ffmpeg.exe'),
+        os.path.join(BASE_DIR, 'bin', 'ffmpeg.exe'),
     ]
     import subprocess
     for p in ffmpeg_paths:
@@ -285,7 +309,7 @@ def get_transcript():
             'skip_download': True,
             'writesubtitles': True,
             'writeautomaticsub': True,
-            'subtitleslangs': ['es', 'en'], # Priorizar español e inglés
+            'subtitleslangs': ['es.*', 'en.*'], # Priorizar español e inglés (usando comodines para variantes)
             'outtmpl': os.path.join(tmpdir, 'sub.%(ext)s'),
             'quiet': True,
             'noplaylist': True,
@@ -302,22 +326,35 @@ def get_transcript():
                     
                     # Buscar el archivo de subtítulos generado
                     sub_file = None
-                    for ext in ['es.vtt', 'es.srt', 'en.vtt', 'en.srt']:
-                        path = os.path.join(tmpdir, f'sub.{ext}')
-                        if os.path.exists(path):
-                            sub_file = path
+                    is_english = False
+                    
+                    # Primero buscamos español
+                    for f in os.listdir(tmpdir):
+                        if f.startswith('sub.') and ('.es' in f or '.es-419' in f or '.es-ES' in f):
+                            sub_file = os.path.join(tmpdir, f)
                             break
                     
+                    # Si no hay español, buscamos inglés
+                    if not sub_file:
+                        for f in os.listdir(tmpdir):
+                            if f.startswith('sub.') and ('.en' in f or '.en-US' in f or '.en-GB' in f):
+                                sub_file = os.path.join(tmpdir, f)
+                                is_english = True
+                                break
+
+                    # Si no encontramos con nombres específicos, buscamos cualquiera que empiece por sub.
                     if not sub_file:
                         for f in os.listdir(tmpdir):
                             if f.startswith('sub.'):
                                 sub_file = os.path.join(tmpdir, f)
+                                is_english = ('.en' in f)
                                 break
 
                     if sub_file:
                         with open(sub_file, 'r', encoding='utf-8') as f:
                             content = f.read()
                         
+                        # Limpiar VTT/SRT
                         content = re.sub(r'WEBVTT.*?\n\n', '', content, flags=re.DOTALL)
                         content = re.sub(r'\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*?\n', '', content)
                         content = re.sub(r'^\d+\n', '', content, flags=re.MULTILINE)
@@ -333,33 +370,42 @@ def get_transcript():
                         
                         final_text = ' '.join(clean_lines)
                         
+                        # Traducción si es inglés
+                        method_label = 'subtitles'
+                        if is_english:
+                            print("Traduciendo subtitulos de ingles a español...")
+                            final_text = translate_to_spanish(final_text)
+                            method_label = 'subtitles_translated'
+                        
                         # Guardar en caché
                         cache[url] = final_text
                         save_cache(cache)
                         
-                        return jsonify({'transcript': final_text})
+                        return jsonify({
+                            'transcript': final_text,
+                            'method': method_label
+                        })
             
             # Si no es YouTube o no tiene subs, forzamos el error para ir al fallback (Whisper)
             raise Exception("No direct subtitles found, switching to Whisper")
 
         except Exception as e:
             error_str = str(e)
-            print(f"Subtitles failed or not applicable: {error_str}. Attempting local transcription with Whisper...")
+            print(f"Subtitles failed or not applicable: {error_str}. Attempting local transcription...")
             
             try:
-                if whisper_model is None:
+                model = get_whisper_model()
+                if model is None:
                     raise Exception("Modelo Whisper no disponible")
 
-                # 1. Descargar audio (evitando postprocesado complejo)
+                # 1. Descargar audio
                 audio_opts = {
-                    # Para YouTube pedimos solo audio, para otros (IG) mejor el archivo directo (best)
                     'format': 'bestaudio/best' if ('youtube.com' in url or 'youtu.be' in url) else 'best',
                     'outtmpl': os.path.join(tmpdir, 'audio.%(ext)s'),
                     'quiet': True,
                     'noplaylist': True,
                     'no_warnings': True,
                 }
-                # No añadir postprocessors aquí para evitar errores de ffmpeg incompatibles
                 fpath = get_ffmpeg_path()
                 if fpath:
                     audio_opts['ffmpeg_location'] = fpath
@@ -367,15 +413,12 @@ def get_transcript():
                 with yt_dlp.YoutubeDL(audio_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
                     
-                    # BUSCAR ARCHIVO REAL (Evita el error .NA)
                     audio_file = None
                     for f in os.listdir(tmpdir):
-                        # Priorizar el que tenga extensión de audio común
                         if f.startswith('audio.') and any(ext in f for ext in ['.m4a', '.mp3', '.mp4', '.webm']):
                             audio_file = os.path.join(tmpdir, f)
                             break
                     
-                    # Fallback: primer archivo que no sea .json o similar
                     if not audio_file:
                         for f in os.listdir(tmpdir):
                             if not f.endswith('.json'):
@@ -383,20 +426,21 @@ def get_transcript():
                                 break
                     
                     if not audio_file or not os.path.exists(audio_file):
-                        raise Exception(f"No se encontró el archivo de audio tras descarga. Directorio: {os.listdir(tmpdir)}")
-
-                    file_size = os.path.getsize(audio_file)
-                    print(f"Archivo de audio listo para Whisper: {audio_file} (Tamaño: {file_size} bytes)")
-                    
-                    if file_size == 0:
-                        raise Exception("El archivo de audio descargado pesa 0 bytes.")
+                        raise Exception("No se encontro el audio")
                 
-                # 2. Transcribir con el modelo ya cargado en memoria
+                # 2. Transcribir detectando idioma automáticamente
                 import torch
-                # Forzamos español con language='es'
-                result = whisper_model.transcribe(audio_file, language='es', fp16=torch.cuda.is_available())
+                # Quitamos language='es' para que detecte el idioma real
+                result = model.transcribe(audio_file, fp16=torch.cuda.is_available())
+                detected_lang = result.get('language', 'unknown')
+                print(f"Whisper detecto idioma: {detected_lang}")
                 
                 final_text = result['text'].strip()
+                
+                # Traducción si no es español
+                if detected_lang != 'es':
+                    print(f"Traduciendo Whisper de {detected_lang} a español...")
+                    final_text = translate_to_spanish(final_text)
                 
                 # Guardar en caché
                 cache[url] = final_text
@@ -409,7 +453,7 @@ def get_transcript():
             except Exception as whisper_e:
                 whisper_error_str = str(whisper_e)
                 print(f"Whisper failed raw: {whisper_error_str}")
-                return jsonify({'error': f'Error en transcripción IA: {whisper_error_str}'}), 500
+                return jsonify({'error': f'Error en transcripcion IA: {whisper_error_str}'}), 500
 
 @app.route('/api/download', methods=['POST'])
 def download_video():

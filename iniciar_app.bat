@@ -1,30 +1,71 @@
 @echo off
+setlocal enabledelayedexpansion
+cd /d "%~dp0"
+
 echo ==========================================
 echo   Iniciando YouTube Downloader...
 echo ==========================================
 echo.
 
-:: Verificar si el entorno virtual existe
+:: 1. Limpiar procesos previos en el puerto 5000
+echo [+] Verificando si el servidor ya esta corriendo...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000 ^| findstr LISTENING') do (
+    if NOT "%%a"=="" (
+        echo [!] El puerto 5000 esta ocupado. Cerrando proceso %%a...
+        taskkill /F /PID %%a >nul 2>&1
+    )
+)
+
+:: 2. Verificar si el entorno virtual existe
 if not exist ".venv" (
-    echo [ERROR] No se encontró el entorno virtual (.venv).
-    echo Por favor, ejecuta primero 'instalar.bat'.
+    echo [ERROR] No se encontro el entorno virtual .venv
+    echo Por favor, ejecuta primero instalar.bat
     pause
     exit /b
 )
 
-:: Iniciar el backend en segundo plano
-echo [+] Levantando el servidor backend (Flask)...
-start /b cmd /c ".venv\Scripts\activate && cd backend && python app.py"
+:: 3. Verificar si la carpeta se ha movido
+findstr /C:"%CD%" ".venv\Scripts\activate.bat" >nul
+if %errorlevel% neq 0 (
+    echo [!] AVISO: La ubicacion de la carpeta ha cambiado.
+    echo Si el servidor no arranca, borra la carpeta .venv y ejecuta instalar.bat
+    echo.
+)
 
-:: Esperar un par de segundos para que el servidor inicie
-timeout /t 3 /nobreak >nul
+:: 4. Iniciar el backend en una ventana aparte
+echo [+] Levantando el servidor backend Flask...
+echo [INFO] Se abrira una ventana negra que se cerrara automaticamente al terminar.
+:: Usamos comillas dobles para manejar espacios en rutas y simplificamos el comando de activacion
+start "Servidor Backend - YT Downloader" cmd /c "call .venv\Scripts\activate && python backend\app.py || (echo [ERROR] El servidor se detuvo inesperadamente && pause)"
 
-:: Abrir el frontend en el navegador
-echo [+] Abriendo la interfaz en el navegador...
-start frontend\index.html
-
+:: 5. Esperar a que el servidor este listo (maximo 30 segundos)
+echo [+] Esperando a que el servidor responda en el puerto 5000...
+set "ready=0"
+for /L %%i in (1,1,30) do (
+    if !ready! equ 0 (
+        netstat -an | findstr :5000 | findstr LISTENING >nul
+        if !errorlevel! equ 0 (
+            set "ready=1"
+        ) else (
+            <nul set /p=.
+            timeout /t 1 /nobreak >nul
+        )
+    )
+)
 echo.
-echo [+] La aplicación está lista.
-echo No cierres esta ventana mientras uses el programa (o ciérrala al terminar).
-echo.
-pause
+
+:: 6. Abrir el frontend si el servidor esta listo
+if !ready! equ 1 (
+    echo [+] Servidor listo. Abriendo la interfaz en el navegador...
+    start "" "frontend\index.html"
+    echo.
+    echo [+] Aplicacion iniciada con exito.
+    echo [!] IMPORTANTE: No cierres la ventana negra del servidor mientras uses el programa.
+) else (
+    echo [ERROR] El servidor no inicio a tiempo o hubo un error.
+    echo Revisa la ventana negra del servidor para mas detalles.
+    pause
+)
+
+timeout /t 3 >nul
+exit
