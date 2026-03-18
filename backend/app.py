@@ -157,7 +157,6 @@ def get_video_info():
 
     if is_youtube:
         attempts = [
-            # TV Client: Muy resistente a bloqueos
             {**base_opts, 'extractor_args': {'youtube': {'player_client': ['tv', 'web']}}},
             {**base_opts, 'extractor_args': {'youtube': {'player_client': ['android']}}},
             {**base_opts, 'extractor_args': {'youtube': {'player_client': ['ios']}}},
@@ -250,25 +249,23 @@ def get_transcript():
     import re
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        ydl_opts = {
-            'skip_download': True,
-            'writesubtitles': True,
-            'writeautomaticsub': True,
-            'subtitleslangs': ['es.*', 'en.*'],
-            'outtmpl': os.path.join(tmpdir, 'sub.%(ext)s'),
-            'quiet': True,
-            'noplaylist': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
-        }
         fpath = get_ffmpeg_path()
-        if fpath:
-            ydl_opts['ffmpeg_location'] = fpath
-
         try:
+            # 1. Intentar descargar subtítulos directos
+            ydl_opts_subs = {
+                'skip_download': True,
+                'writesubtitles': True,
+                'writeautomaticsub': True,
+                'subtitleslangs': ['es.*', 'en.*'],
+                'outtmpl': os.path.join(tmpdir, 'sub.%(ext)s'),
+                'quiet': True,
+                'noplaylist': True,
+                'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
+            }
+            if fpath: ydl_opts_subs['ffmpeg_location'] = fpath
             if 'youtube.com' in url or 'youtu.be' in url:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
+                with yt_dlp.YoutubeDL(ydl_opts_subs) as ydl:
+                    ydl.extract_info(url, download=True)
                     sub_file = None
                     is_english = False
                     for f in os.listdir(tmpdir):
@@ -289,61 +286,73 @@ def get_transcript():
                         content = re.sub(r'^\d+\n', '', content, flags=re.MULTILINE)
                         content = re.sub(r'<[^>]*>', '', content)
                         final_text = ' '.join([line.strip() for line in content.split('\n') if line.strip()])
-                        if is_english:
-                            final_text = translate_to_spanish(final_text)
-                        
+                        if is_english: final_text = translate_to_spanish(final_text)
                         cache[url] = final_text
                         save_cache(cache)
                         return jsonify({'transcript': final_text, 'method': 'subtitles'})
-            raise Exception("No subs")
-        except:
-            try:
-                # Descargar audio para IA
-                audio_opts = {
-                    'format': 'bestaudio/best',
-                    'outtmpl': os.path.join(tmpdir, 'audio.%(ext)s'),
-                    'quiet': True,
-                    'noplaylist': True,
-                }
-                if fpath: audio_opts['ffmpeg_location'] = fpath
-                with yt_dlp.YoutubeDL(audio_opts) as ydl:
-                    ydl.download([url])
-                    audio_file = None
-                    for f in os.listdir(tmpdir):
-                        if f.startswith('audio.'):
-                            audio_file = os.path.join(tmpdir, f)
-                            break
-                
-                # TRANSCRIPCIÓN IA
-                if groq_client:
+
+            # 2. Descargar audio con bitrate bajo (64k) para optimizar el limite de 25MB de Groq
+            audio_opts = {
+                'format': 'bestaudio/best',
+                'outtmpl': os.path.join(tmpdir, 'audio.%(ext)s'),
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '64', 
+                }],
+                'quiet': True,
+                'noplaylist': True,
+            }
+            if fpath: audio_opts['ffmpeg_location'] = fpath
+            with yt_dlp.YoutubeDL(audio_opts) as ydl:
+                ydl.download([url])
+                audio_file = None
+                for f in os.listdir(tmpdir):
+                    if f.startswith('audio.'):
+                        audio_file = os.path.join(tmpdir, f)
+                        break
+                if not audio_file: raise Exception("No se pudo descargar el audio")
+
+            # 3. Transcribir con Groq API (Prioridad)
+            if groq_client:
+                file_size_mb = os.path.getsize(audio_file) / (1024 * 1024)
+                if file_size_mb < 25:
                     try:
-                        print("Usando Groq API...")
+                        print(f"Usando Groq API ({file_size_mb:.1f}MB)...")
                         with open(audio_file, "rb") as f:
                             transcription = groq_client.audio.transcriptions.create(
                                 file=(audio_file, f.read()),
                                 model="whisper-large-v3",
-                                response_format="text"
+                                response_format="text",
+                                language="es"
                             )
+                        if os.path.exists(audio_file): os.remove(audio_file) # Cleanup inmediata
                         cache[url] = transcription
                         save_cache(cache)
-                        return jsonify({'transcript': transcription, 'method': 'groq_whisper'})
+                        return jsonify({'transcript': transcription, 'method': 'groq_whisper_v3'})
                     except Exception as e:
-                        print(f"Groq error: {e}")
+                        print(f"Groq API Error: {e}")
+                else:
+                    print(f"Audio demasiado grande para Groq ({file_size_mb:.1f}MB).")
 
-                # IA Local Fallback
-                model = get_whisper_model()
-                if not model: raise Exception("No IA available on Render")
-                result = model.transcribe(audio_file)
-                text = result['text'].strip()
-                if result.get('language') != 'es': text = translate_to_spanish(text)
-                cache[url] = text
-                save_cache(cache)
-                return jsonify({'transcript': text, 'method': 'whisper'})
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-            finally:
-                gc.collect()
-                if torch.cuda.is_available(): torch.cuda.empty_cache()
+            # 4. Fallback: IA Local (Whisper)
+            model = get_whisper_model()
+            if not model: raise Exception("IA Local no disponible (Limite RAM). Configura GROQ_API_KEY")
+            
+            result = model.transcribe(audio_file)
+            text = result['text'].strip()
+            if result.get('language') != 'es': text = translate_to_spanish(text)
+            if os.path.exists(audio_file): os.remove(audio_file) # Cleanup
+            
+            cache[url] = text
+            save_cache(cache)
+            return jsonify({'transcript': text, 'method': 'whisper_local'})
+
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+        finally:
+            gc.collect()
+            if torch.cuda.is_available(): torch.cuda.empty_cache()
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
@@ -373,7 +382,7 @@ def download_video():
                     filename = os.path.join(DOWNLOAD_FOLDER, f)
                     break
             if filename: return send_file(filename, as_attachment=True)
-            return jsonify({'error': 'Not found'}), 500
+            return jsonify({'error': 'Archivo no generado'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
