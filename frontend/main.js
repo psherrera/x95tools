@@ -34,7 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     
     // API Configuration
-    const API_BASE = 'http://127.0.0.1:5000/api'; 
+    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://127.0.0.1:5000/api'
+        : 'https://x95tools-backend.onrender.com/api';
+
     const APP_PASSWORD = 'pablo'; 
     
     let currentTab = 'youtube';
