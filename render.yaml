@@ -1,13 +1,14 @@
 services:
   - type: web
-    name: x95tools-backend
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT
+    name: x95tools-pro
+    runtime: docker
+    dockerContext: .
+    dockerfilePath: Dockerfile
+    plan: free # Can be changed to paid if needed
     envVars:
       - key: PORT
         value: 10000
-      - key: PYTHON_VERSION
-        value: 3.10.0
       - key: RENDER
         value: "true"
+      - key: GROQ_API_KEY
+        sync: false

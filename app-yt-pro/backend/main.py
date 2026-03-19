@@ -41,8 +41,9 @@ app.add_middleware(
 )
 
 # --- CONFIGURACIÓN DE RUTAS ---
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# El ROOT_DIR del proyecto Pro es el padre de backend/ (donde están backend y frontend)
+ROOT_DIR = os.path.dirname(BASE_DIR)
 FRONTEND_DIR = os.path.join(ROOT_DIR, 'frontend')
 DOWNLOAD_FOLDER = os.path.join(BASE_DIR, 'downloads')
 CACHE_FILE = os.path.join(BASE_DIR, 'transcripts_cache.json')
