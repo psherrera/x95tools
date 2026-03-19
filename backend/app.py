@@ -149,36 +149,70 @@ def get_video_info():
         'cachedir': False,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'cookiefile': cookie_path if has_cookies else None,
         'nocheckcertificate': True,
     }
+
+    # Estrategia de cookies: 
+    # 1. Si es local (!IS_RENDER), usamos los navegadores del sistema (más cómodo).
+    # 2. Si es en la nube (Render) o falla lo anterior, usamos cookies.txt.
+    if not IS_RENDER:
+        base_opts['cookiesfrombrowser'] = 'chrome' # Chrome/Edge/Brave suelen funcionar con 'chrome'
+    elif has_cookies:
+        base_opts['cookiefile'] = cookie_path
+
+
     if has_ffmpeg:
         base_opts['ffmpeg_location'] = ffmpeg_path
 
-    if is_youtube:
-        attempts = [
-            {**base_opts, 'extractor_args': {'youtube': {'player_client': ['tv', 'web']}}},
-            {**base_opts, 'extractor_args': {'youtube': {'player_client': ['android']}}},
-            {**base_opts, 'extractor_args': {'youtube': {'player_client': ['ios']}}},
-            {**base_opts},
-        ]
-    else:
-        attempts = [{**base_opts}]
-
     info = None
     last_error = ""
-    for opts in attempts:
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if info and info.get('formats'):
-                    break
-        except Exception as e:
-            last_error = str(e)
-            continue
+    
+    # Lista de navegadores a probar localmente si no estamos en Render
+    browsers_to_try = [None]
+    if not IS_RENDER:
+        browsers_to_try = ['chrome', 'edge', 'opera', 'firefox', 'brave', 'vivaldi'] + [None]
+
+
+    for browser in browsers_to_try:
+        current_base = {**base_opts}
+        if browser:
+            current_base['cookiesfrombrowser'] = browser
+        elif has_cookies:
+            current_base['cookiefile'] = cookie_path
+        
+        # Para cada navegador, probamos diferentes clientes de YouTube
+        if is_youtube:
+            sub_attempts = [
+                {'youtube': {'player_client': ['tv', 'web']}},
+                {'youtube': {'player_client': ['android']}},
+                {'youtube': {'player_client': ['ios']}},
+                {} # Por defecto
+            ]
+        else:
+            sub_attempts = [{}]
+
+        for client_args in sub_attempts:
+            opts = {**current_base}
+            if client_args:
+                opts['extractor_args'] = client_args
+            
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    # Usamos download=False para solo obtener info
+                    info = ydl.extract_info(url, download=False)
+                    if info and info.get('formats'):
+                        break
+            except Exception as e:
+                last_error = str(e)
+                continue
+        if info: break
 
     if not info:
-        return jsonify({'error': f'No se pudo obtener información. Error: {last_error}'}), 500
+        msg = f"No se pudo obtener información. Error: {last_error}"
+        if "confirm you're not a bot" in last_error or "403" in last_error:
+            msg += "\n\n[TIP] YouTube detectó actividad sospechosa. Prueba:\n1. Cerrar Chrome/Edge si están abiertos.\n2. Asegúrate de tener sesión iniciada en YouTube en tu navegador.\n3. Intenta de nuevo en unos segundos."
+        return jsonify({'error': msg}), 500
+
 
     formats = []
     seen_res = set()
@@ -252,6 +286,9 @@ def get_transcript():
         fpath = get_ffmpeg_path()
         try:
             # 1. Intentar descargar subtítulos directos
+            cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
+            has_cookies = os.path.exists(cookie_path)
+            
             ydl_opts_subs = {
                 'skip_download': True,
                 'writesubtitles': True,
@@ -260,8 +297,13 @@ def get_transcript():
                 'outtmpl': os.path.join(tmpdir, 'sub.%(ext)s'),
                 'quiet': True,
                 'noplaylist': True,
-                'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
             }
+            if not IS_RENDER:
+                ydl_opts_subs['cookiesfrombrowser'] = 'chrome'
+            elif has_cookies:
+                ydl_opts_subs['cookiefile'] = cookie_path
+
+
             if fpath: ydl_opts_subs['ffmpeg_location'] = fpath
             if 'youtube.com' in url or 'youtu.be' in url:
                 with yt_dlp.YoutubeDL(ydl_opts_subs) as ydl:
@@ -303,6 +345,12 @@ def get_transcript():
                 'quiet': True,
                 'noplaylist': True,
             }
+            if not IS_RENDER:
+                audio_opts['cookiesfrombrowser'] = 'chrome'
+            elif os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')):
+                audio_opts['cookiefile'] = os.path.join(BACKEND_DIR, 'cookies.txt')
+
+
             if fpath: audio_opts['ffmpeg_location'] = fpath
             with yt_dlp.YoutubeDL(audio_opts) as ydl:
                 ydl.download([url])
@@ -368,8 +416,15 @@ def download_video():
         'quiet': True,
         'noplaylist': True,
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'cookiefile': os.path.join(BACKEND_DIR, 'cookies.txt') if os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')) else None,
     }
+    if not IS_RENDER:
+        ydl_opts['cookiesfrombrowser'] = 'chrome'
+    else:
+        cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
+        if os.path.exists(cookie_path):
+            ydl_opts['cookiefile'] = cookie_path
+
+
     fpath = get_ffmpeg_path()
     if fpath: ydl_opts['ffmpeg_location'] = fpath
     

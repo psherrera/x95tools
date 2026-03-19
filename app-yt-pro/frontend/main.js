@@ -34,9 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const navItems = document.querySelectorAll('.nav-item');
     
     // API Configuration
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
+    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? 'http://127.0.0.1:5000/api'
-        : '/api';
+        : 'https://x95tools-backend.onrender.com/api';
 
     const APP_PASSWORD = 'pablo'; 
     
@@ -145,7 +145,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Populate Video Info
             if (data.thumbnail) {
-                thumbnailImg.src = data.thumbnail;
+                let thumbUrl = data.thumbnail;
+                if (thumbUrl.startsWith('/')) {
+                    thumbUrl = `${API_BASE}${thumbUrl}`;
+                }
+                thumbnailImg.src = thumbUrl;
                 thumbnailImg.style.display = '';
             } else {
                 thumbnailImg.style.display = 'none';

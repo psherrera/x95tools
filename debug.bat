@@ -30,7 +30,7 @@ if %errorlevel% neq 0 (
 )
 
 :: 4. Iniciar el backend (sin START para ver errores aquí mismo si falla)
-echo [+] Levantando el servidor backend (Flask)...
+echo [+] Levantando el servidor backend (FastAPI)...
 call .venv\Scripts\activate
-python backend\app.py
+python app-yt-pro\backend\main.py
 pause

@@ -36,7 +36,7 @@ if %errorlevel% neq 0 (
 echo [+] Levantando el servidor backend Flask...
 echo [INFO] Se abrira una ventana negra que se cerrara automaticamente al terminar.
 :: Usamos comillas dobles para manejar espacios en rutas y simplificamos el comando de activacion
-start "Servidor Backend - YT Downloader" cmd /c "call .venv\Scripts\activate && python backend\app.py || (echo [ERROR] El servidor se detuvo inesperadamente && pause)"
+start "Servidor Backend - YT Downloader Pro" cmd /c "call .venv\Scripts\activate && python app-yt-pro\backend\main.py || (echo [ERROR] El servidor se detuvo inesperadamente && pause)"
 
 :: 5. Esperar a que el servidor este listo (maximo 30 segundos)
 echo [+] Esperando a que el servidor responda en el puerto 5000...
@@ -57,7 +57,7 @@ echo.
 :: 6. Abrir el frontend si el servidor esta listo
 if !ready! equ 1 (
     echo [+] Servidor listo. Abriendo la interfaz en el navegador...
-    start "" "frontend\index.html"
+    start "" "http://localhost:5000"
     echo.
     echo [+] Aplicacion iniciada con exito.
     echo [!] IMPORTANTE: No cierres la ventana negra del servidor mientras uses el programa.
