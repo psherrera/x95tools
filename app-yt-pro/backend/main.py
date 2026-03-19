@@ -11,10 +11,15 @@ from typing import Optional, List
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from deep_translator import GoogleTranslator
 import whisper
 from fastapi import Response
 from fastapi.staticfiles import StaticFiles
+import asyncio
+import base64
+import random
+import time
 try:
     from pydub import AudioSegment
 except ImportError:
@@ -123,6 +128,15 @@ async def get_video_info(req: VideoRequest, request: Request):
     url = req.url
     is_youtube = 'youtube.com' in url or 'youtu.be' in url
     
+    # Pool de User-Agents modernos para rotación
+    USER_AGENTS = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1'
+    ]
+
     # Opciones unificadas y robustas para evitar 403 Forbidden
     def get_robust_opts(target_url, extra={}):
         cookie_path = os.path.join(BASE_DIR, 'cookies.txt')
@@ -133,18 +147,33 @@ async def get_video_info(req: VideoRequest, request: Request):
             'noplaylist': True,
             'nocheckcertificate': True,
             'ignoreerrors': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'user_agent': random.choice(USER_AGENTS),
             **extra
         }
-        if os.path.exists(cookie_path):
-            print(f"DEBUG: Cargando cookies desde {cookie_path}")
-            opts['cookiefile'] = cookie_path
-        else:
-            print(f"DEBUG: No se encontró archivo de cookies en {cookie_path}")
+
+        # Soporte para cookies vía Variable de Entorno (Prioridad)
+        cookie_b64 = os.environ.get('COOKIES_B64')
+        if cookie_b64:
+            try:
+                # Decodificamos y guardamos en un archivo temporal seguro
+                cookie_data = base64.b64decode(cookie_b64).decode()
+                temp_cookie = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                temp_cookie.write(cookie_data)
+                temp_cookie.close()
+                opts['cookiefile'] = temp_cookie.name
+                print(f"DEBUG: Cargando cookies desde variable COOKIES_B64 (Temp: {temp_cookie.name})")
+            except Exception as e:
+                print(f"DEBUG: Error cargando COOKIES_B64: {e}")
         
-        # Estrategia de clientes para YouTube
+        # Si no hay COOKIES_B64, intentamos con el archivo cookies.txt local
+        if 'cookiefile' not in opts and os.path.exists(cookie_path):
+            print(f"DEBUG: Cargando cookies locales desde {cookie_path}")
+            opts['cookiefile'] = cookie_path
+        
+        # Estrategia de clientes para YouTube (Priorizamos móviles para saltar bloqueos)
         if 'youtube.com' in target_url or 'youtu.be' in target_url:
-            opts['extractor_args'] = {'youtube': {'player_client': ['android', 'ios', 'tv']}}
+            opts['extractor_args'] = {'youtube': {'player_client': ['ios', 'android', 'web']}}
+            opts['user_agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1'
         return opts
 
     info = None
@@ -158,17 +187,23 @@ async def get_video_info(req: VideoRequest, request: Request):
     except Exception as e:
         last_error = str(e)
         print(f"Error en extracción primaria: {last_error}")
-        # Intento secundario con cliente web si falla
+        # Intento secundario con cliente alternativo si falla
         try:
             opts = get_robust_opts(url)
-            opts['extractor_args'] = {'youtube': {'player_client': ['web', 'tv']}}
+            # Forzamos cliente 'tv' o 'mweb' como última opción
+            if 'youtube.com' in url or 'youtu.be' in url:
+                opts['extractor_args'] = {'youtube': {'player_client': ['tv', 'mweb']}}
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
         except Exception as e2:
             last_error = f"{last_error} | {str(e2)}"
 
     if not info:
-        raise HTTPException(status_code=500, detail=f"No se pudo obtener información: {last_error}")
+        print(f"DEBUG: EXTRACT_INFO FAILED for {url}. Last error: {last_error}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"No se pudo obtener información del video. Esto puede deberse a que el video es privado, está restringido o YouTube ha bloqueado la conexión temporalmente. Error: {last_error[:100]}..."
+        )
 
     # Procesar formatos
     formats = []
@@ -454,16 +489,48 @@ async def proxy_thumbnail(url: str):
 
 # --- SERVIDO DE FRONTEND ---
 if os.path.exists(FRONTEND_DIR):
-    app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
-    
-    @app.get("/")
-    async def serve_index():
-        index_path = os.path.join(FRONTEND_DIR, 'index.html')
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
-        return {"error": "Frontend no encontrado"}
+    @app.get("/{path:path}")
+    async def serve_static_or_index(path: str):
+        # Si la ruta está vacía, servimos index.html
+        if not path:
+            return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+        
+        # Intentamos buscar el archivo en la carpeta frontend
+        file_path = os.path.join(FRONTEND_DIR, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # Si no existe (para rutas de SPA o errores), servimos index.html como fallback
+        return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
 else:
     print(f"ADVERTENCIA: No se encontró la carpeta frontend en {FRONTEND_DIR}")
+
+# --- HEALTHCHECKS ---
+@app.get("/api/health/cookies")
+async def check_cookies():
+    """Verifica si las cookies actuales siguen siendo válidas con un video de prueba."""
+    test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    try:
+        def get_info():
+            opts = get_robust_opts(test_url)
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(test_url, download=False)
+        
+        # Ejecutamos en un thread pool para no bloquear el loop de FastAPI
+        info = await asyncio.to_thread(get_info)
+        return {
+            "status": "ok", 
+            "cookie_valid": True, 
+            "video_title": info.get('title'),
+            "server_time": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "cookie_valid": False, 
+            "error": str(e),
+            "server_time": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
 
 if __name__ == "__main__":
     import uvicorn

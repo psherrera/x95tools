@@ -29,15 +29,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginBtn = document.getElementById('login-btn');
     const passwordInput = document.getElementById('app-password');
     const loginError = document.getElementById('login-error');
+    const clearUrlBtn = document.getElementById('clear-url-btn');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const pwaInstallBtn = document.getElementById('pwa-install-btn');
 
     // Navigation Logic
     const navItems = document.querySelectorAll('.nav-item');
     
-    // API Configuration
-    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://127.0.0.1:5000/api'
-        : 'https://x95tools-backend.onrender.com/api';
-
+    // API Configuration (Detección inteligente Local vs Render)
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+    const isSharedPort = window.location.port === '5000' || window.location.port === '10000';
+    const API_BASE = (isLocal && !isSharedPort) ? 'http://localhost:5000/api' : '/api';
     const APP_PASSWORD = 'pablo'; 
     
     let currentTab = 'youtube';
@@ -102,6 +105,97 @@ document.addEventListener('DOMContentLoaded', () => {
         loginModal.classList.add('hidden');
     }
 
+    // --- Server Status Monitor ---
+    const checkServerStatus = async () => {
+        try {
+            const response = await fetch(`${API_BASE}/health/cookies`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'ok') {
+                    statusDot.classList.replace('bg-slate-600', 'bg-emerald-500');
+                    statusDot.classList.remove('animate-pulse');
+                    statusText.textContent = 'Online';
+                    statusText.classList.replace('text-slate-500', 'text-emerald-500');
+                } else {
+                    statusDot.classList.replace('bg-slate-600', 'bg-amber-500');
+                    statusText.textContent = 'Issues';
+                    statusText.classList.replace('text-slate-500', 'text-amber-500');
+                }
+            }
+        } catch (error) {
+            statusDot.classList.replace('bg-slate-600', 'bg-red-500');
+            statusText.textContent = 'Offline';
+            statusText.classList.replace('text-slate-500', 'text-red-500');
+        }
+    };
+
+    checkServerStatus();
+    // Re-check every 60 seconds
+    setInterval(checkServerStatus, 60000);
+
+    // --- Clear URL Input Logic ---
+    videoUrlInput.addEventListener('input', () => {
+        if (videoUrlInput.value.trim().length > 0) {
+            clearUrlBtn.classList.remove('hidden');
+        } else {
+            clearUrlBtn.classList.add('hidden');
+        }
+    });
+
+    clearUrlBtn.addEventListener('click', () => {
+        videoUrlInput.value = '';
+        clearUrlBtn.classList.add('hidden');
+        videoUrlInput.focus();
+        // Also hide results if cleared
+        videoInfoCard.classList.add('hidden');
+    });
+
+    // --- PWA Installation Logic ---
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        pwaInstallBtn.classList.remove('hidden');
+    });
+
+    pwaInstallBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            pwaInstallBtn.classList.add('hidden');
+        }
+        deferredPrompt = null;
+    });
+
+    window.addEventListener('appinstalled', () => {
+        pwaInstallBtn.classList.add('hidden');
+        deferredPrompt = null;
+    });
+
+    // --- Web Share Target Handler ---
+    const handleSharedContent = () => {
+        const params = new URLSearchParams(window.location.search);
+        const sharedUrl = params.get('url') || params.get('text') || params.get('title');
+        
+        if (sharedUrl) {
+            // Clean up the URL (sometimes apps share text + URL together)
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const found = sharedUrl.match(urlRegex);
+            const cleanUrl = found ? found[0] : sharedUrl;
+
+            if (cleanUrl.startsWith('http')) {
+                videoUrlInput.value = cleanUrl;
+                // Si ya está logueado, disparamos el análisis automáticamente
+                if (localStorage.getItem('app_logged_in') === 'true') {
+                    setTimeout(() => fetchBtn.click(), 500);
+                }
+            }
+        }
+    };
+
+    handleSharedContent();
+
     let currentMaxResThumbnail = '';
 
     // Fetch Video Info
@@ -135,11 +229,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ url })
             });
 
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                const errMsg = errData.detail || errData.error || 'Error desconocido en el servidor';
+                alert(`Error: ${errMsg}`);
+                return;
+            }
+
             const data = await response.json();
 
             if (data.error) {
                 const cleanError = data.error.replace(/\u001b\[[0-9;]*m/g, '');
                 alert(cleanError);
+                return;
+            }
+
+            if (!data.formats || !Array.isArray(data.formats)) {
+                alert('No se encontraron formatos disponibles para este video.');
                 return;
             }
 

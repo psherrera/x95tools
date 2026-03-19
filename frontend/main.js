@@ -33,10 +33,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Navigation Logic
     const navItems = document.querySelectorAll('.nav-item');
     
-    // API Configuration
-    const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
-        ? 'http://127.0.0.1:5000/api'
-        : '/api';
+    // API Configuration (Detección inteligente Local vs Render)
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
+    const isSharedPort = window.location.port === '5000' || window.location.port === '10000';
+    const API_BASE = (isLocal && !isSharedPort) ? 'http://localhost:5000/api' : '/api';
 
     const APP_PASSWORD = 'pablo'; 
     
