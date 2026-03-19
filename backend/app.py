@@ -61,6 +61,79 @@ def save_cache(cache):
     except Exception as e:
         print(f"Error saving cache: {e}")
 
+# --- UNIFIED ROBUST OPTIONS (COOKIES & CLIENTS) ---
+import random
+import base64
+import tempfile
+
+def get_robust_opts(target_url, extra={}):
+    """Genera opciones unificadas para yt-dlp con soporte para cookies locales y de entorno."""
+    USER_AGENTS = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1'
+    ]
+    
+    cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
+    opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'cachedir': False,
+        'noplaylist': True,
+        'nocheckcertificate': True,
+        'ignoreerrors': True,
+        'user_agent': random.choice(USER_AGENTS),
+        **extra
+    }
+
+    # Auto-detección de FFmpeg
+    fpath = get_ffmpeg_path()
+    if fpath:
+        opts['ffmpeg_location'] = fpath
+
+    # Soporte para cookies vía Variable de Entorno (Prioridad)
+    cookie_b64 = os.environ.get('COOKIES_B64')
+    if cookie_b64:
+        try:
+            cookie_data = base64.b64decode(cookie_b64).decode()
+            temp_cookie = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+            temp_cookie.write(cookie_data)
+            temp_cookie.close()
+            opts['cookiefile'] = temp_cookie.name
+            print(f"DEBUG: Cargando cookies desde variable [COOKIES_B64] (Temp: {temp_cookie.name})")
+        except Exception as e:
+            print(f"DEBUG: Error cargando COOKIES_B64: {e}")
+    
+    # Si no hay COOKIES_B64, intentamos con cookiesfrombrowser (Local) o cookies.txt
+    if 'cookiefile' not in opts:
+        if not IS_RENDER:
+            # En local priorizamos navegadores instalados
+            opts['cookiesfrombrowser'] = 'chrome'
+            print("DEBUG: Usando cookies del navegador (Local/Chrome)")
+        elif os.path.exists(cookie_path):
+            print(f"DEBUG: Cargando cookies locales desde {cookie_path}")
+            opts['cookiefile'] = cookie_path
+    
+    # Estrategia de clientes para YouTube (Priorizamos móviles)
+    if 'youtube.com' in target_url or 'youtu.be' in target_url:
+        opts['extractor_args'] = {'youtube': {'player_client': ['ios', 'android', 'web']}}
+        opts['user_agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3.1 Mobile/15E148 Safari/604.1'
+    
+    return opts
+
+@app.route('/api/health/cookies', methods=['GET'])
+def health_check():
+    """Endpoint para el monitor de estado del frontend."""
+    cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
+    has_b64 = os.environ.get('COOKIES_B64') is not None
+    has_file = os.path.exists(cookie_path)
+    
+    if IS_RENDER and not has_b64 and not has_file:
+         return jsonify({'status': 'error', 'message': 'No cookies found in Render'}), 200
+    return jsonify({'status': 'ok'}), 200
+
 whisper_model = None
 
 def get_whisper_model():
@@ -135,83 +208,24 @@ def get_video_info():
     if not url:
         return jsonify({'error': 'Se requiere una URL'}), 400
     
-    ffmpeg_path = get_ffmpeg_path()
-    has_ffmpeg = ffmpeg_path is not None
-    
-    cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
-    has_cookies = os.path.exists(cookie_path)
-    
-    is_youtube = 'youtube.com' in url or 'youtu.be' in url
-
-    base_opts = {
-        'quiet': False,
-        'no_warnings': False,
-        'cachedir': False,
-        'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'nocheckcertificate': True,
-    }
-
-    # Estrategia de cookies: 
-    # 1. Si es local (!IS_RENDER), usamos los navegadores del sistema (más cómodo).
-    # 2. Si es en la nube (Render) o falla lo anterior, usamos cookies.txt.
-    if not IS_RENDER:
-        base_opts['cookiesfrombrowser'] = 'chrome' # Chrome/Edge/Brave suelen funcionar con 'chrome'
-    elif has_cookies:
-        base_opts['cookiefile'] = cookie_path
-
-
-    if has_ffmpeg:
-        base_opts['ffmpeg_location'] = ffmpeg_path
-
-    info = None
-    last_error = ""
-    
-    # Lista de navegadores a probar localmente si no estamos en Render
-    browsers_to_try = [None]
-    if not IS_RENDER:
-        browsers_to_try = ['chrome', 'edge', 'opera', 'firefox', 'brave', 'vivaldi'] + [None]
-
-
-    for browser in browsers_to_try:
-        current_base = {**base_opts}
-        if browser:
-            current_base['cookiesfrombrowser'] = browser
-        elif has_cookies:
-            current_base['cookiefile'] = cookie_path
-        
-        # Para cada navegador, probamos diferentes clientes de YouTube
-        if is_youtube:
-            sub_attempts = [
-                {'youtube': {'player_client': ['tv', 'web']}},
-                {'youtube': {'player_client': ['android']}},
-                {'youtube': {'player_client': ['ios']}},
-                {} # Por defecto
-            ]
-        else:
-            sub_attempts = [{}]
-
-        for client_args in sub_attempts:
-            opts = {**current_base}
-            if client_args:
-                opts['extractor_args'] = client_args
-            
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    # Usamos download=False para solo obtener info
-                    info = ydl.extract_info(url, download=False)
-                    if info and info.get('formats'):
-                        break
-            except Exception as e:
-                last_error = str(e)
-                continue
-        if info: break
+    # Intentos de extracción con opciones unificadas
+    try:
+        opts = get_robust_opts(url)
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            # Usamos download=False para solo obtener info
+            info = ydl.extract_info(url, download=False)
+            last_error = ""
+    except Exception as e:
+        info = None
+        last_error = str(e)
 
     if not info:
         msg = f"No se pudo obtener información. Error: {last_error}"
         if "confirm you're not a bot" in last_error or "403" in last_error:
             msg += "\n\n[TIP] YouTube detectó actividad sospechosa. Prueba:\n1. Cerrar Chrome/Edge si están abiertos.\n2. Asegúrate de tener sesión iniciada en YouTube en tu navegador.\n3. Intenta de nuevo en unos segundos."
         return jsonify({'error': msg}), 500
+
+    has_ffmpeg = get_ffmpeg_path() is not None
 
 
     formats = []
@@ -283,29 +297,15 @@ def get_transcript():
     import re
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        fpath = get_ffmpeg_path()
         try:
-            # 1. Intentar descargar subtítulos directos
-            cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
-            has_cookies = os.path.exists(cookie_path)
-            
-            ydl_opts_subs = {
-                'skip_download': True,
-                'writesubtitles': True,
-                'writeautomaticsub': True,
-                'subtitleslangs': ['es.*', 'en.*'],
-                'outtmpl': os.path.join(tmpdir, 'sub.%(ext)s'),
-                'quiet': True,
-                'noplaylist': True,
-            }
-            if not IS_RENDER:
-                ydl_opts_subs['cookiesfrombrowser'] = 'chrome'
-            elif has_cookies:
-                ydl_opts_subs['cookiefile'] = cookie_path
-
-
-            if fpath: ydl_opts_subs['ffmpeg_location'] = fpath
             if 'youtube.com' in url or 'youtu.be' in url:
+                ydl_opts_subs = get_robust_opts(url, {
+                    'skip_download': True,
+                    'writesubtitles': True,
+                    'writeautomaticsub': True,
+                    'subtitleslangs': ['es.*', 'en.*'],
+                    'outtmpl': os.path.join(tmpdir, 'sub.%(ext)s'),
+                })
                 with yt_dlp.YoutubeDL(ydl_opts_subs) as ydl:
                     ydl.extract_info(url, download=True)
                     sub_file = None
@@ -334,24 +334,15 @@ def get_transcript():
                         return jsonify({'transcript': final_text, 'method': 'subtitles'})
 
             # 2. Descargar audio con bitrate bajo (64k) para optimizar el limite de 25MB de Groq
-            audio_opts = {
+            audio_opts = get_robust_opts(url, {
                 'format': 'bestaudio/best',
                 'outtmpl': os.path.join(tmpdir, 'audio.%(ext)s'),
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '64', 
-                }],
-                'quiet': True,
-                'noplaylist': True,
-            }
-            if not IS_RENDER:
-                audio_opts['cookiesfrombrowser'] = 'chrome'
-            elif os.path.exists(os.path.join(BACKEND_DIR, 'cookies.txt')):
-                audio_opts['cookiefile'] = os.path.join(BACKEND_DIR, 'cookies.txt')
-
-
-            if fpath: audio_opts['ffmpeg_location'] = fpath
+                }]
+            })
             with yt_dlp.YoutubeDL(audio_opts) as ydl:
                 ydl.download([url])
                 audio_file = None
@@ -410,23 +401,10 @@ def download_video():
     unique_id = str(uuid.uuid4())
     output_template = os.path.join(DOWNLOAD_FOLDER, f'%(title)s_{unique_id}.%(ext)s')
     
-    ydl_opts = {
+    ydl_opts = get_robust_opts(url, {
         'format': format_id,
         'outtmpl': output_template,
-        'quiet': True,
-        'noplaylist': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    }
-    if not IS_RENDER:
-        ydl_opts['cookiesfrombrowser'] = 'chrome'
-    else:
-        cookie_path = os.path.join(BACKEND_DIR, 'cookies.txt')
-        if os.path.exists(cookie_path):
-            ydl_opts['cookiefile'] = cookie_path
-
-
-    fpath = get_ffmpeg_path()
-    if fpath: ydl_opts['ffmpeg_location'] = fpath
+    })
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
