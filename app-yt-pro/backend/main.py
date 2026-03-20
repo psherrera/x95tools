@@ -123,11 +123,6 @@ class VideoRequest(BaseModel):
 
 # --- ENDPOINTS ---
 
-@app.post("/api/video-info")
-async def get_video_info(req: VideoRequest, request: Request):
-    url = req.url
-    is_youtube = 'youtube.com' in url or 'youtu.be' in url
-    
 
 # --- UNIFIED ROBUST OPTIONS (COOKIES & CLIENTS) ---
 def get_robust_opts(target_url, extra={}):
