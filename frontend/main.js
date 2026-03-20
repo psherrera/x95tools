@@ -29,6 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginBtn = document.getElementById('login-btn');
     const passwordInput = document.getElementById('app-password');
     const loginError = document.getElementById('login-error');
+    const clearUrlBtn = document.getElementById('clear-url-btn');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const pwaInstallBtn = document.getElementById('pwa-install-btn');
 
     // Navigation Logic
     const navItems = document.querySelectorAll('.nav-item');
@@ -37,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
     const isSharedPort = window.location.port === '5000' || window.location.port === '10000';
     const API_BASE = (isLocal && !isSharedPort) ? 'http://localhost:5000/api' : '/api';
-
+    console.log("DEBUG: API_BASE =", API_BASE, "isLocal =", isLocal, "Port =", window.location.port);
     const APP_PASSWORD = 'pablo'; 
     
     let currentTab = 'youtube';
@@ -94,13 +98,125 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     passwordInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') loginBtn.click();
+        if (e.key === 'Enter' && loginBtn) loginBtn.click();
     });
 
     // Check session
     if (localStorage.getItem('app_logged_in') === 'true') {
         loginModal.classList.add('hidden');
     }
+
+    // --- Server Status Monitor ---
+    const updateStatusUI = (status) => {
+        // Reset styles
+        statusDot.className = 'w-2 h-2 rounded-full';
+        statusText.className = 'text-xs font-medium';
+        
+        if (status === 'online') {
+            statusDot.classList.add('bg-emerald-500', 'shadow-[0_0_8px_rgba(16,185,129,0.5)]');
+            statusText.classList.add('text-emerald-500');
+            statusText.textContent = 'Online';
+        } else if (status === 'issues') {
+            statusDot.classList.add('bg-amber-500', 'animate-pulse');
+            statusText.classList.add('text-amber-500');
+            statusText.textContent = 'Cookie Issues';
+        } else {
+            statusDot.classList.add('bg-slate-600');
+            statusText.classList.add('text-slate-500');
+            statusText.textContent = 'Offline';
+        }
+    };
+
+    const checkServerStatus = async () => {
+        try {
+            // Safety Check
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            if (!statusDot || !statusText) return;
+
+            const response = await fetch(`${API_BASE}/health/cookies`);
+            if (response.ok) {
+                const data = await response.json();
+                updateStatusUI(data.status === 'ok' ? 'online' : 'issues');
+            } else {
+                updateStatusUI('offline');
+            }
+        } catch (error) {
+            console.error("Status check failed:", error);
+            updateStatusUI('offline');
+        }
+    };
+
+    // Delay start for Tailwind CDN stability
+    setTimeout(checkServerStatus, 1500);
+    setInterval(checkServerStatus, 60000);
+
+    // --- Clear URL Input Logic ---
+    if (videoUrlInput && clearUrlBtn) {
+        videoUrlInput.addEventListener('input', () => {
+            if (videoUrlInput.value.trim().length > 0) {
+                clearUrlBtn.classList.remove('hidden');
+            } else {
+                clearUrlBtn.classList.add('hidden');
+            }
+        });
+
+        clearUrlBtn.addEventListener('click', () => {
+            videoUrlInput.value = '';
+            clearUrlBtn.classList.add('hidden');
+            videoUrlInput.focus();
+            // Also hide results if cleared
+            if (videoInfoCard) videoInfoCard.classList.add('hidden');
+        });
+    }
+
+    // --- PWA Installation Logic ---
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        pwaInstallBtn.classList.remove('hidden');
+    });
+
+    if (pwaInstallBtn) {
+        pwaInstallBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                pwaInstallBtn.classList.add('hidden');
+            }
+            deferredPrompt = null;
+        });
+    }
+
+    window.addEventListener('appinstalled', () => {
+        pwaInstallBtn.classList.add('hidden');
+        deferredPrompt = null;
+    });
+
+    // --- Web Share Target Handler ---
+    const handleSharedContent = () => {
+        const params = new URLSearchParams(window.location.search);
+        const sharedUrl = params.get('url') || params.get('text') || params.get('title');
+        
+        if (sharedUrl) {
+            // Clean up the URL (sometimes apps share text + URL together)
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const found = sharedUrl.match(urlRegex);
+            const cleanUrl = found ? found[0] : sharedUrl;
+
+            if (cleanUrl.startsWith('http')) {
+                videoUrlInput.value = cleanUrl;
+                // Si ya está logueado, disparamos el análisis automáticamente
+                if (localStorage.getItem('app_logged_in') === 'true') {
+                    setTimeout(() => fetchBtn.click(), 500);
+                }
+            }
+        }
+    };
+
+    handleSharedContent();
 
     let currentMaxResThumbnail = '';
 
@@ -135,6 +251,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ url })
             });
 
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                const errMsg = errData.detail || errData.error || 'Error desconocido en el servidor';
+                alert(`Error: ${errMsg}`);
+                return;
+            }
+
             const data = await response.json();
 
             if (data.error) {
@@ -143,9 +266,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            if (!data.formats || !Array.isArray(data.formats)) {
+                alert('No se encontraron formatos disponibles para este video.');
+                return;
+            }
+
             // Populate Video Info
             if (data.thumbnail) {
-                thumbnailImg.src = data.thumbnail;
+                let thumbUrl = data.thumbnail;
+                if (thumbUrl.startsWith('/')) {
+                    thumbUrl = `${API_BASE}${thumbUrl}`;
+                }
+                thumbnailImg.src = thumbUrl;
                 thumbnailImg.style.display = '';
             } else {
                 thumbnailImg.style.display = 'none';

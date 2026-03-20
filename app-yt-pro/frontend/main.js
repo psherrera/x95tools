@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     passwordInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') loginBtn.click();
+        if (e.key === 'Enter' && loginBtn) loginBtn.click();
     });
 
     // Check session
@@ -129,6 +129,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const checkServerStatus = async () => {
         try {
+            // Safety Check
+            const statusDot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            if (!statusDot || !statusText) return;
+
             const response = await fetch(`${API_BASE}/health/cookies`);
             if (response.ok) {
                 const data = await response.json();
@@ -142,25 +147,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    checkServerStatus();
+    // Delay start for Tailwind CDN stability
+    setTimeout(checkServerStatus, 1500);
     setInterval(checkServerStatus, 60000);
 
     // --- Clear URL Input Logic ---
-    videoUrlInput.addEventListener('input', () => {
-        if (videoUrlInput.value.trim().length > 0) {
-            clearUrlBtn.classList.remove('hidden');
-        } else {
-            clearUrlBtn.classList.add('hidden');
-        }
-    });
+    if (videoUrlInput && clearUrlBtn) {
+        videoUrlInput.addEventListener('input', () => {
+            if (videoUrlInput.value.trim().length > 0) {
+                clearUrlBtn.classList.remove('hidden');
+            } else {
+                clearUrlBtn.classList.add('hidden');
+            }
+        });
 
-    clearUrlBtn.addEventListener('click', () => {
-        videoUrlInput.value = '';
-        clearUrlBtn.classList.add('hidden');
-        videoUrlInput.focus();
-        // Also hide results if cleared
-        videoInfoCard.classList.add('hidden');
-    });
+        clearUrlBtn.addEventListener('click', () => {
+            videoUrlInput.value = '';
+            clearUrlBtn.classList.add('hidden');
+            videoUrlInput.focus();
+            // Also hide results if cleared
+            if (videoInfoCard) videoInfoCard.classList.add('hidden');
+        });
+    }
 
     // --- PWA Installation Logic ---
     let deferredPrompt;
@@ -170,15 +178,17 @@ document.addEventListener('DOMContentLoaded', () => {
         pwaInstallBtn.classList.remove('hidden');
     });
 
-    pwaInstallBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            pwaInstallBtn.classList.add('hidden');
-        }
-        deferredPrompt = null;
-    });
+    if (pwaInstallBtn) {
+        pwaInstallBtn.addEventListener('click', async () => {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                pwaInstallBtn.classList.add('hidden');
+            }
+            deferredPrompt = null;
+        });
+    }
 
     window.addEventListener('appinstalled', () => {
         pwaInstallBtn.classList.add('hidden');

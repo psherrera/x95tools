@@ -7,19 +7,7 @@
     <title>StreamVault - Premium Video Downloader</title>
     
     <!-- TailWind & Google Fonts -->
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
-    
-    <!-- PWA & Mobile Meta -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#895af6">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="icon.svg">
-    
-    <link rel="stylesheet" href="style.css?v=1.1">
-    
+    <!-- TailWind Configuration -->
     <script id="tailwind-config">
         tailwind.config = {
             darkMode: "class",
@@ -37,6 +25,7 @@
             },
         }
     </script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 </head>
 
 <body class="bg-background-dark font-display text-slate-100 flex flex-col min-h-screen">
@@ -91,6 +80,17 @@
             <h1 class="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">StreamVault</h1>
         </div>
         <div class="flex items-center gap-4">
+            <!-- Server Status Badge -->
+            <div id="status-badge" class="flex items-center gap-2 px-3 py-1 bg-slate-800/50 border border-white/5 rounded-full transition-all">
+                <div id="status-dot" class="w-2 h-2 rounded-full bg-slate-600"></div>
+                <span id="status-text" class="text-xs font-medium text-slate-500">Offline</span>
+            </div>
+            
+            <!-- Install Button (Hidden by default) -->
+            <button id="pwa-install-btn" class="hidden bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all">
+                Instalar App
+            </button>
+
             <span id="quality-warning" class="hidden px-3 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs rounded-full">
                 ⚠️ FFmpeg Warning
             </span>
@@ -116,6 +116,10 @@
                     <input type="text" id="video-url" 
                         class="w-full bg-transparent border-none focus:ring-0 py-4 text-slate-100 placeholder:text-slate-600" 
                         placeholder="Pega el enlace aquí..." autocomplete="off">
+                    <!-- Reset Button -->
+                    <button id="clear-url-btn" class="hidden hover:bg-white/10 p-1.5 rounded-lg transition-all text-slate-500 hover:text-white">
+                        <span class="material-symbols-outlined text-lg">close</span>
+                    </button>
                 </div>
                 <button id="fetch-info-btn" class="bg-accent hover:bg-accent/90 text-background-dark font-extrabold px-10 py-4 rounded-xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-lg shadow-accent/20">
                     <span class="material-symbols-outlined">analytics</span>
@@ -275,7 +279,7 @@
         &copy; 2026 StreamVault Digital Media Hub
     </footer>
 
-    <script src="main.js?v=1.1"></script>
+    <script src="main.js?v=1.5" defer></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
