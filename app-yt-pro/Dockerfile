@@ -1,5 +1,5 @@
 # Use python-slim for a smaller image
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Install system dependencies (FFmpeg only)
 RUN apt-get update && apt-get install -y \
@@ -20,9 +20,10 @@ COPY frontend ./frontend
 
 # Directorios para cache de modelos Whisper y descargas
 ENV WHISPER_CACHE_DIR=/app/model
+ENV FRONTEND_DIR=/app/frontend
 RUN mkdir -p /app/model /app/backend/downloads
 
 EXPOSE 10000
 
-# Run uvicorn pointing to the main.py in the backend folder
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+# Run uvicorn from within the backend folder to ensure correct path resolution
+CMD ["sh", "-c", "cd backend && uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]

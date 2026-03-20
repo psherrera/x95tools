@@ -3,7 +3,7 @@ uvicorn
 yt-dlp
 # openai-whisper (Quitados para Render RAM)
 # torch (Quitados para Render RAM)
-numpy
+# numpy (Quitado para Render RAM - solo necesario para Whisper local)
 pydantic
 python-multipart
 requests
