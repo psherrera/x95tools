@@ -1,12 +1,9 @@
 # Use python-slim for a smaller image
 FROM python:3.9-slim
 
-# Install system dependencies (FFmpeg and Node.js for yt-dlp)
+# Install system dependencies (FFmpeg only)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    curl \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,7 +11,6 @@ WORKDIR /app
 # Copy requirements from the backend folder
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir --upgrade yt-dlp
 

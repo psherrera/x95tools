@@ -4,7 +4,6 @@ import json
 import gc
 import re
 import tempfile
-import torch
 import yt_dlp
 import requests
 from typing import Optional, List
@@ -13,7 +12,6 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from deep_translator import GoogleTranslator
-import whisper
 from fastapi import Response
 from fastapi.staticfiles import StaticFiles
 import asyncio
@@ -85,13 +83,22 @@ _whisper_model = None
 
 def get_whisper_model():
     global _whisper_model
-    # En PC priorizamos el modelo local 'base' para mejor calidad si no hay Groq o si se prefiere local
+    
+    # En Render con Groq disponible, evitamos cargar Whisper local por RAM
+    if IS_RENDER and GROQ_API_KEY:
+        print("INFO: Modo Render con Groq activo. Whisper local desactivado para ahorrar RAM.")
+        return None
+
+    # Si no, intentamos carga lazy (solo se ejecuta si se llega aquí)
     if _whisper_model is None:
         try:
-            print("Cargando modelo Whisper 'base' en memoria...")
-            # Intentar cargar desde cache persistente si existe
+            import torch
+            import whisper
+            print("Cargando modelo Whisper 'base' en memoria (Lazy Load)...")
+            # Ajustar dispositivo
+            device = "cuda" if torch.cuda.is_available() else "cpu"
             model_path = os.environ.get('WHISPER_CACHE_DIR', os.path.join(os.path.expanduser("~"), ".cache", "whisper"))
-            _whisper_model = whisper.load_model("base", download_root=model_path)
+            _whisper_model = whisper.load_model("base", device=device, download_root=model_path)
         except Exception as e:
             print(f"Error cargando Whisper local: {e}")
             return None

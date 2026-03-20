@@ -1,8 +1,8 @@
 fastapi
 uvicorn
 yt-dlp
-openai-whisper
-torch
+# openai-whisper (Quitados para Render RAM)
+# torch (Quitados para Render RAM)
 numpy
 pydantic
 python-multipart
