@@ -448,24 +448,6 @@ async def proxy_thumbnail(url: str):
         print(f"DEBUG: Proxy FAILED: {e}")
         return Response(status_code=500)
 
-# --- SERVIDO DE FRONTEND ---
-if os.path.exists(FRONTEND_DIR):
-    @app.get("/{path:path}")
-    async def serve_static_or_index(path: str):
-        # Si la ruta está vacía, servimos index.html
-        if not path:
-            return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
-        
-        # Intentamos buscar el archivo en la carpeta frontend
-        file_path = os.path.join(FRONTEND_DIR, path)
-        if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        
-        # Si no existe (para rutas de SPA o errores), servimos index.html como fallback
-        return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
-else:
-    print(f"ADVERTENCIA: No se encontró la carpeta frontend en {FRONTEND_DIR}")
-
 # --- HEALTHCHECKS ---
 @app.get("/api/health/cookies")
 async def check_cookies():
@@ -492,6 +474,25 @@ async def check_cookies():
             "error": str(e),
             "server_time": time.strftime("%Y-%m-%d %H:%M:%S")
         }
+
+# --- SERVIDO DE FRONTEND ---
+# Este bloque DEBE ir al final para no interceptar rutas de la API
+if os.path.exists(FRONTEND_DIR):
+    @app.get("/{path:path}")
+    async def serve_static_or_index(path: str):
+        # Si la ruta está vacía, servimos index.html
+        if not path:
+            return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+        
+        # Intentamos buscar el archivo en la carpeta frontend
+        file_path = os.path.join(FRONTEND_DIR, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # Si no existe (para rutas de SPA o errores), servimos index.html como fallback
+        return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+else:
+    print(f"ADVERTENCIA: No se encontró la carpeta frontend en {FRONTEND_DIR}")
 
 if __name__ == "__main__":
     import uvicorn

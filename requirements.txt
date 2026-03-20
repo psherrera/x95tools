@@ -35,3 +35,9 @@ Werkzeug==3.1.6
 yt-dlp==2026.3.13
 deep-translator==1.11.4
 groq==0.18.0
+fastapi
+uvicorn
+python-multipart
+pydantic
+pydub
+python-dotenv

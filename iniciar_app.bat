@@ -33,10 +33,10 @@ if %errorlevel% neq 0 (
 )
 
 :: 4. Iniciar el backend en una ventana aparte
-echo [+] Levantando el servidor backend Flask...
+echo [+] Levantando el servidor backend FastAPI (StreamVault Pro)...
 echo [INFO] Se abrira una ventana negra que se cerrara automaticamente al terminar.
 :: Usamos comillas dobles para manejar espacios en rutas y simplificamos el comando de activacion
-start "Servidor Backend - YT Downloader Pro" cmd /c "call .venv\Scripts\activate && python app-yt-pro\backend\main.py || (echo [ERROR] El servidor se detuvo inesperadamente && pause)"
+start "Servidor Backend - StreamVault Pro" cmd /c "call .venv\Scripts\activate && python app-yt-pro\backend\main.py || (echo [ERROR] El servidor se detuvo inesperadamente && pause)"
 
 :: 5. Esperar a que el servidor este listo (maximo 30 segundos)
 echo [+] Esperando a que el servidor responda en el puerto 5000...
