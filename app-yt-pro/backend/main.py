@@ -45,6 +45,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- MIDDLEWARE DE LOGGING ---
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    # Logeamos solo peticiones a la API para no saturar con estáticos
+    if request.url.path.startswith("/api/"):
+        print(f"DEBUG API: {request.method} {request.url.path}")
+    response = await call_next(request)
+    return response
+
 # --- CONFIGURACIÓN DE RUTAS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # El ROOT_DIR del proyecto Pro es el padre de backend/ (donde están backend y frontend)
@@ -486,6 +495,14 @@ if os.path.exists(FRONTEND_DIR):
         
         # Si no existe (para rutas de SPA o errores), servimos index.html como fallback
         return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+
+    # Soporte explícito para HEAD / (Render HealthCheck)
+    @app.head("/", include_in_schema=False)
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        if os.path.exists(os.path.join(FRONTEND_DIR, 'index.html')):
+            return FileResponse(os.path.join(FRONTEND_DIR, 'index.html'))
+        return Response(content="StreamVault API Root", media_type="text/plain")
 else:
     print(f"ADVERTENCIA: No se encontró la carpeta frontend en {FRONTEND_DIR}")
 

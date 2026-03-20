@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
     const isSharedPort = window.location.port === '5000' || window.location.port === '10000';
     const API_BASE = (isLocal && !isSharedPort) ? 'http://localhost:5000/api' : '/api';
+    console.log("DEBUG: API_BASE =", API_BASE, "isLocal =", isLocal, "Port =", window.location.port);
     const APP_PASSWORD = 'pablo'; 
     
     let currentTab = 'youtube';
